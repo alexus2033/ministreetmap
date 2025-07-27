@@ -1,105 +1,255 @@
+<!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="description" content="Local Page to get geolocation">
-        <meta name="keywords" content="Location GPS Mobile IP">
-        <meta name="author" content="alexus2033">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>My Locator</title>
-        <style>
-            table {width: 100%;}
-            td div {max-height: 40px;
-                overflow: hidden;}
-            #myMap {padding: 0;}
-            .alert {color: red;
-                font-weight: bold;}
-        </style>
-        <script type= "text/javascript" src="http://www.openlayers.org/api/OpenLayers.js"></script>
-    </head>
-    <body>
-        <table>
-            <tr>
-                <td><div id="myIP"></div></td>
-                <td><div id="myLoc"></div></td>
-                <td><button onclick="getLocation()">Location</button></td>
-                <td><div id="myInfo"></div></td>
-                <td><a href="https://wiki.openstreetmap.org/wiki/DE:OpenStreetMap_Carto/Lines" target="wiki">Legende</a></td>
-            </tr>
-        </table>
-    <div id="myMap"></div>
-    <script>
+<head>
+  <meta charset="UTF-8">
+  <meta name="description" content="Local Page to get geolocation">
+  <meta name="keywords" content="Location GPS Mobile IP">
+  <meta name="author" content="alexus2033">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Locator</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    table {width: 100%;}
+    td div {max-height: 40px;
+        overflow: hidden;}
+    #map { padding: 0;
+        height: calc(100vh - 50px);}
+    .alert {color: red;
+        font-weight: bold;}
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+    <table>
+        <tr>
+            <td><div id="myIP"></div></td>
+            <td><div id="myLoc"></div></td>
+            <td><button onclick="getLocation()">Location</button></td>
+            <td><button onclick="fetchAndDisplayPOIs()">Restaurants</button></td>
+            <td><div id="myInfo"></div></td>
+            <td><a href="https://wiki.openstreetmap.org/wiki/DE:OpenStreetMap_Carto/Lines" target="wiki">Legende</a></td>
+        </tr>
+    </table>
+  <div id="map"></div>
 
-        async function getIpApiJSON(){
-            const response = await fetch('http://ip-api.com/json/?fields=61439');
+  <script src="http://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://openingh.openstreetmap.de/opening_hours.js/opening_hours+deps.min.js"></script>
+
+  <script>
+
+    const MIN_ZOOM_QUERY = 12; // minimaler Zoom für Suchausführung
+
+    // Leaflet Karte initialisieren
+    const map = L.map('map');
+
+    // OpenStreetMap-Standard-Kachel-Layer hinzufügen
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution:
+        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> Mitwirkende',
+    }).addTo(map); 
+
+/*     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://carto.com/">CartoDB</a>'
+    }).addTo(map); */
+
+    var grayIcon = new L.Icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+    });
+
+    async function getIpApiJSON(){
+        const response = await fetch('http://ip-api.com/json/?fields=61439');
+        return response.json();
+    }
+
+    async function getCloudflareJSON(){
+        let data = await fetch('http://1.1.1.1/cdn-cgi/trace').then(res=>res.text())
+        let arr = data.trim().split('\n').map(e=>e.split('='))
+        return Object.fromEntries(arr)
+    }
+
+    function showPosition(position, zoom=13) {
+      const info = document.getElementById("info");
+      let pos = (position.coords) ? position.coords : position,
+          alt = (pos.altitude) ? `Alt: ${pos.altitude.toFixed(2)}` : "",
+          speed = (pos.speed) ? `Speed: ${pos.speed.toFixed(2)}` : "",
+          accur = (pos.accuracy) ? `Accuracy: ${pos.accuracy.toFixed(2)}` : ""
+      
+      myInfo.innerHTML = `Long: ${pos.longitude} Lat: ${pos.latitude} ${alt} ${speed} ${accur}`; 
+      if(pos.accuracy > 150){
+          myInfo.classList.add("alert");
+      } else { //mark invalid location
+          myInfo.classList.remove("alert");
+      }
+      console.log(position);
+      map.setView([position.latitude,position.longitude], zoom);
+    }
+
+    const label = document.getElementById("label");
+    const result = fetch('http://ip-api.com/json/?fields=61439');
+    result.then(response => {
+        if (response.ok) {
             return response.json();
         }
-
-        async function getCloudflareJSON(){
-            let data = await fetch('https://1.1.1.1/cdn-cgi/trace').then(res=>res.text())
-            let arr = data.trim().split('\n').map(e=>e.split('='))
-            return Object.fromEntries(arr)
+        throw new Error(`Request to ip-api.com failed ${response}`);
+    }).then(x => {
+        myIP.innerHTML = `IP: ${x.query} ${x.isp}`;
+        if(x.region == x.countryCode.trim()){
+          x.region = "";
         }
-
-        const label = document.getElementById("label");
-        const result = fetch('http://ip-api.com/json/?fields=61439');
-        result.then(response => {
-            if (response.ok) {
-                return response.json();
-            }
-            throw new Error(`Request to ip-api.com failed ${response}`);
-        }).then(x => {
-            console.log(x);
-            myIP.innerHTML = `IP: ${x.query} ${x.isp}`;
-            myLoc.innerHTML = `Location: ${x.countryCode} ${x.region} ${x.zip} ${x.city}`
-            let pos = { longitude: x.lon, latitude: x.lat}
-            showPosition(pos, 10);
-        }).catch((error) => {
-            getCloudflareJSON().then(x => {
-                myIP.innerHTML = `IP: ${x.ip} Location: ${x.loc} ${x.colo}`;
-            });
+        myLoc.innerHTML = `Location: ${x.countryCode} ${x.region} ${x.zip} ${x.city}`
+        let pos = { longitude: x.lon, latitude: x.lat}
+        showPosition(pos, 10);
+    }).catch((error) => {
+        getCloudflareJSON().then(x => {
+            myIP.innerHTML = `IP: ${x.ip} Location: ${x.loc} ${x.colo}`;
         });
-        map = new OpenLayers.Map("myMap");
-        map.addLayer(new OpenLayers.Layer.OSM());
-        map.zoomToMaxExtent();
+    });
 
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(showPosition);
-            } else { 
-                myLoc.innerHTML = "not supported by this browser :-(";
-            }
+    let currentMarkers = [];
+
+    function locError(err) {
+      myInfo.innerHTML = `ERROR(${err.code}): ${err.message}`;
+      myInfo.classList.add("alert");
+    }
+
+    function clearMarkers() {
+      currentMarkers.forEach(marker => map.removeLayer(marker));
+      currentMarkers = [];
+    }
+
+    function clearPosition() {
+      if (currentPos) {
+        map.removeLayer(currentPos);
+      }
+    }
+
+    function getLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(showPosition, locError);
+        } else { 
+            myLoc.innerHTML = "location not supported by this browser";
+            yInfo.classList.add("alert");
         }
+    }
 
-        function showPosition(position, zoom=16) {
-            const info = document.getElementById("info");
-            let pos = (position.coords) ? position.coords : position,
-                alt = (pos.altitude) ? `Alt: ${pos.altitude.toFixed(2)}` : "",
-                speed = (pos.speed) ? `Speed: ${pos.speed.toFixed(2)}` : "",
-                accur = (pos.accuracy) ? `Accuracy: ${pos.accuracy.toFixed(2)}` : ""
-            
-            myInfo.innerHTML = `Long: ${pos.longitude} Lat: ${pos.latitude} ${alt} ${speed} ${accur}`; 
-            if(pos.accuracy > 150){
-                myInfo.classList.add("alert");
-            } else { //mark invalid location
-                myInfo.classList.remove("alert");
-            }
+    function isOpen(opening_hours_str) {
+      if (!opening_hours_str) return true;
+      try {
+        // Language for the warnings (get it from the browser settings).
+        let locale = navigator.language;
 
-            var lonLat = new OpenLayers.LonLat(pos.longitude, pos.latitude)
-                .transform(
-                new OpenLayers.Projection("EPSG:4326"), // transform from WGS 1984
-                map.getProjectionObject()  // to Spherical Mercator Projection
-                );
+        // Create opening_hours object.
+        const oh = new opening_hours(opening_hours_str, {}, { 'locale': locale });
+        return oh.getState();
+      } catch (e) {
+        console.warn(e);
+        return true;
+      }
+    }
 
-            var markers = map.layers.find(({ name }) => name === "Markers");
-            if(typeof markers !== "undefined"){
-                console.log("clean");
-                markers.clearMarkers();
+    function isTouchDevice() {
+      return ('ontouchstart' in window) || 
+          (navigator.maxTouchPoints > 0) ||
+          (navigator.msMaxTouchPoints > 0) ||
+          (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+    }
+
+    function fetchAndDisplayPOIs() {
+/*       const zoom = map.getZoom();
+      if(zoom < MIN_ZOOM_QUERY) {
+        console.log(`Zoom ${zoom} zu gering - Suche wird nicht ausgeführt`);
+        return; // Bei zu kleinem Zoom keine Suche
+      } */
+
+      // BoundingBox aus aktueller Ansicht ermitteln (S,W,N,E)
+      const bounds = map.getBounds();
+      const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+
+      var center = map.getCenter();
+
+
+      const query = `
+        [out:json][timeout:25];
+        node(around:5000,${center.lat},${center.lng})["amenity"="restaurant"];
+        out body;
+      `;
+
+      const query1 = `
+        [out:json][timeout:25];
+        node["amenity"="fuel"](${bbox});
+        out body;
+      `;
+
+      const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+
+      fetch(url)
+        .then(response => response.json())
+        .then(data => {
+          clearMarkers();
+
+          data.elements.forEach(poi => {
+            console.log(poi);
+            let name = poi.tags.name || "Tankstelle";
+            let info = poi.tags.cuisine || poi.tags.website || poi.tags.phone
+            if(info){
+              if(info.startsWith("http")){
+                info = `<br><a href="${info}">${info}</a>`
+              } else {
+                info = `<br>${info}`
+              }
             } else {
-                markers = new OpenLayers.Layer.Markers( "Markers" );
-                map.addLayer(markers);
-            }  
-            markers.addMarker(new OpenLayers.Marker(lonLat));
-            map.setCenter (lonLat, zoom);
-        }
-    </script>
-  </body></html>
+              info = "";
+            }
+            const hours = poi.tags.opening_hours || "Unbekannt";
+            let markerOptions = {};
+            let statusText = "";
+
+            if (poi.tags.opening_hours) {
+                if (isOpen(poi.tags.opening_hours)) {
+                    statusText = " (Geöffnet)";
+                } else {
+                    statusText = " (Geschlossen)";
+                    markerOptions.icon = grayIcon;
+                }
+                name += statusText;
+            }
+
+            const popupContent = `<b>${name}</b>${info}<br>` +
+              (poi.tags.opening_hours ? `Öffnungszeiten: ${hours}` : "");
+            const marker = L.marker([poi.lat, poi.lon], markerOptions).addTo(map)
+              .bindPopup(popupContent);
+            if(!isTouchDevice){
+              //use mouseover events
+              marker.on('mouseover', function (e) {
+                this.openPopup();
+              });
+              marker.on('mouseout', function (e) {
+                this.closePopup();
+              });
+            }
+            currentMarkers.push(marker);
+          });
+
+          console.log(`Gefundene und angezeigte Tankstellen: ${data.elements.length}`);
+        })
+        .catch(err => {
+          console.error("Fehler bei Overpass-Abfrage:", err);
+        });
+    }
+
+    // Abfrage bei initialem Laden, wenn Zoom passt
+    // fetchAndDisplayPOIs();
+
+    // Abfrage bei Zoom-Ende (zoomend) und Kartenbewegung (moveend), nur wenn Zoom passt
+    // map.on('zoomend moveend', fetchAndDisplayPOIs);
+  </script>
+</body>
+</html>
