@@ -1,0 +1,105 @@
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="description" content="Local Page to get geolocation">
+        <meta name="keywords" content="Location GPS Mobile IP">
+        <meta name="author" content="alexus2033">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>My Locator</title>
+        <style>
+            table {width: 100%;}
+            td div {max-height: 40px;
+                overflow: hidden;}
+            #myMap {padding: 0;}
+            .alert {color: red;
+                font-weight: bold;}
+        </style>
+        <script type= "text/javascript" src="http://www.openlayers.org/api/OpenLayers.js"></script>
+    </head>
+    <body>
+        <table>
+            <tr>
+                <td><div id="myIP"></div></td>
+                <td><div id="myLoc"></div></td>
+                <td><button onclick="getLocation()">Location</button></td>
+                <td><div id="myInfo"></div></td>
+                <td><a href="https://wiki.openstreetmap.org/wiki/DE:OpenStreetMap_Carto/Lines" target="wiki">Legende</a></td>
+            </tr>
+        </table>
+    <div id="myMap"></div>
+    <script>
+
+        async function getIpApiJSON(){
+            const response = await fetch('http://ip-api.com/json/?fields=61439');
+            return response.json();
+        }
+
+        async function getCloudflareJSON(){
+            let data = await fetch('https://1.1.1.1/cdn-cgi/trace').then(res=>res.text())
+            let arr = data.trim().split('\n').map(e=>e.split('='))
+            return Object.fromEntries(arr)
+        }
+
+        const label = document.getElementById("label");
+        const result = fetch('http://ip-api.com/json/?fields=61439');
+        result.then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error(`Request to ip-api.com failed ${response}`);
+        }).then(x => {
+            console.log(x);
+            myIP.innerHTML = `IP: ${x.query} ${x.isp}`;
+            myLoc.innerHTML = `Location: ${x.countryCode} ${x.region} ${x.zip} ${x.city}`
+            let pos = { longitude: x.lon, latitude: x.lat}
+            showPosition(pos, 10);
+        }).catch((error) => {
+            getCloudflareJSON().then(x => {
+                myIP.innerHTML = `IP: ${x.ip} Location: ${x.loc} ${x.colo}`;
+            });
+        });
+        map = new OpenLayers.Map("myMap");
+        map.addLayer(new OpenLayers.Layer.OSM());
+        map.zoomToMaxExtent();
+
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(showPosition);
+            } else { 
+                myLoc.innerHTML = "not supported by this browser :-(";
+            }
+        }
+
+        function showPosition(position, zoom=16) {
+            const info = document.getElementById("info");
+            let pos = (position.coords) ? position.coords : position,
+                alt = (pos.altitude) ? `Alt: ${pos.altitude.toFixed(2)}` : "",
+                speed = (pos.speed) ? `Speed: ${pos.speed.toFixed(2)}` : "",
+                accur = (pos.accuracy) ? `Accuracy: ${pos.accuracy.toFixed(2)}` : ""
+            
+            myInfo.innerHTML = `Long: ${pos.longitude} Lat: ${pos.latitude} ${alt} ${speed} ${accur}`; 
+            if(pos.accuracy > 150){
+                myInfo.classList.add("alert");
+            } else { //mark invalid location
+                myInfo.classList.remove("alert");
+            }
+
+            var lonLat = new OpenLayers.LonLat(pos.longitude, pos.latitude)
+                .transform(
+                new OpenLayers.Projection("EPSG:4326"), // transform from WGS 1984
+                map.getProjectionObject()  // to Spherical Mercator Projection
+                );
+
+            var markers = map.layers.find(({ name }) => name === "Markers");
+            if(typeof markers !== "undefined"){
+                console.log("clean");
+                markers.clearMarkers();
+            } else {
+                markers = new OpenLayers.Layer.Markers( "Markers" );
+                map.addLayer(markers);
+            }  
+            markers.addMarker(new OpenLayers.Marker(lonLat));
+            map.setCenter (lonLat, zoom);
+        }
+    </script>
+  </body></html>
