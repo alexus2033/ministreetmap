@@ -5,41 +5,102 @@
   <meta name="description" content="Local Page to get geolocation">
   <meta name="keywords" content="Location GPS Mobile IP">
   <meta name="author" content="alexus2033">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Locator</title>
-  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>My Locator</title>
   <style>
-    table {width: 100%;}
-    td div {max-height: 40px;
-        overflow: hidden;}
+    table { width: 100%; }
+    td div { height: 40px;
+      overflow: hidden; }
     #map { padding: 0;
-        height: calc(100vh - 50px);}
+      height: calc(100vh - 40px);
+      min-height: 40px; }
+    #container {
+      height: 100vh;
+      width: 100%;
+      position: relative;
+    }
+    #top-pane {
+      height: 40px; /* Split bei 40px */
+      background: #eee;
+    }
+    #splitter {
+      height: 4px;
+      background: #888;
+      cursor: row-resize;
+    }
+    #bottom-pane {
+      position: absolute;
+      top: 44px; /* 40px + 4px Splitter */
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ccc;
+    }
     .alert {color: red;
         font-weight: bold;}
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-    <table>
+  <div id="container">
+    <div id="top-pane">
+      <table>
         <tr>
             <td><div id="myIP"></div></td>
             <td><div id="myLoc"></div></td>
             <td><button onclick="getLocation()">Location</button></td>
-            <td><button onclick="fetchAndDisplayPOIs()">Restaurants</button></td>
+            <td><label for="poiType">POI: </label>
+            <select id="poiType" name="poi">
+              <option value="fuel">Tankstelle</option>
+              <option value="supermarket">Supermarkt</option>
+              <option value="restaurant">Restaurant</option>
+              <option value="atm">Bankautomat</option>
+              <option value="doctors">Arzt</option>
+              <option value="pharmacy">Apotheke</option>
+            </select>
+            <button onclick="fetchAndDisplayPOIs()">Zeigen</button></td>
             <td><div id="myInfo"></div></td>
             <td><a href="https://wiki.openstreetmap.org/wiki/DE:OpenStreetMap_Carto/Lines" target="wiki">Legende</a></td>
         </tr>
-    </table>
-  <div id="map"></div>
-
-  <script src="http://unpkg.com/leaflet/dist/leaflet.js"></script>
+      </table>
+    </div>
+    <div id="splitter"></div>
+    <div id="bottom-pane">
+      <div id="map"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""></script>
   <script src="https://openingh.openstreetmap.de/opening_hours.js/opening_hours+deps.min.js"></script>
 
+  <script id="splittercontrol">
+    const splitter = document.getElementById('splitter');
+    const topPane = document.getElementById('top-pane');
+    const bottomPane = document.getElementById('bottom-pane');
+    const container = document.getElementById('container');
+    let isDragging = false;
+
+    splitter.addEventListener('mousedown', function(e) {
+      isDragging = true;
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (!isDragging) return;
+      const containerTop = container.getBoundingClientRect().top;
+      let newHeight = e.clientY - containerTop;
+      if (newHeight < 20) newHeight = 20; // Mindesthöhe
+      topPane.style.height = newHeight + 'px';
+      bottomPane.style.top = (newHeight + 4) + 'px'; // 4px Splitterhöhe
+    });
+
+    document.addEventListener('mouseup', function(e) {
+      isDragging = false;
+      document.body.style.userSelect = '';
+    });
+  </script>
   <script>
-
-    const MIN_ZOOM_QUERY = 12; // minimaler Zoom für Suchausführung
-
     // Leaflet Karte initialisieren
     const map = L.map('map');
 
@@ -50,14 +111,14 @@
         '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> Mitwirkende',
     }).addTo(map); 
 
-/*     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+/*  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://carto.com/">CartoDB</a>'
     }).addTo(map); */
 
     var grayIcon = new L.Icon({
-        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconUrl: 'data:image/png;base64,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',
+        shadowUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACkAAAApCAQAAAACach9AAACJ0lEQVR4Ae3ShY6bQRADYIeZ3v+9yszMDZPlkSWtslPuiS6+C+8n/zNp4p/froi8Jq/Jxk+TkwmHX//Wz8lG3jNjTeaguabD6HAVbphMwIIzqtd+rzKYhsgUNNcqo3fEBlyyOWmwhbbS4b8SaLBu7SGlpL9gklw3YpYR6J5Bm0zAguspZjvqSVQxqvxsPSJJKYIFKh5A2VIDyMgYfYB9hvcmI0VPTxVZS81ER7qiBoFqBAa9MKOKLzzv2BE3EOnlmDTrNRXryToGOGR65nhvSphjMP6b6WJ6xMYYxSW7l1Pp6CSzbLFPgAN3NGLKPRn3c59qxzapCTPUFNVKh0vUe24azMkW+uRm/B8UU3O3Eiw4nOrrafOSF5gS7PqHUotBQQ6f11p22HDOi+66i2LIHcWJOZrTP+rkhOl7n8YcTzCQIuIvyZPQrvs5Br0OdTsyB+YYrwKokXvsgOIXZzbeQ0DMnhHIqGOdBMEl9qKYAo3pBbbDNkijUSgjv/PrMFhwRwS2YbbMzqg+SzdukoxbeiSEVlgyK6yFmjSYtDxhTXRv1OsgsCb2jflu8hLMyC0P7Qg54NE1qc/MF5PqeAHWSfDL3zxN9dsQ+YD3zEeRS4GeYgFm5I7HNiJPfP4V7/CKeUvwsxpqhkwFzMgjj33Vwe+EnuIxngn8FvNTSCkwmJG+rQm8J/MId/EQL3nZwe2EmSNm9ufkFq9xHzcJPscnLGMRomBKqdzOY2EH+IPOLMEAAAAASUVORK5CYII=',
         iconSize: [25, 41],
         iconAnchor: [12, 41],
         popupAnchor: [1, -34],
@@ -163,29 +224,22 @@
     }
 
     function fetchAndDisplayPOIs() {
-/*       const zoom = map.getZoom();
-      if(zoom < MIN_ZOOM_QUERY) {
-        console.log(`Zoom ${zoom} zu gering - Suche wird nicht ausgeführt`);
-        return; // Bei zu kleinem Zoom keine Suche
-      } */
+      const poi = document.getElementById('poiType');
+      const poiText = poi.options[poi.selectedIndex].text;
+      let poiTag = 'amenity';
+      if(poi.value == 'supermarket'){
+        poiTag = 'shop';
+      }
 
       // BoundingBox aus aktueller Ansicht ermitteln (S,W,N,E)
       const bounds = map.getBounds();
       const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
 
       var center = map.getCenter();
-
-
       const query = `
         [out:json][timeout:25];
-        node(around:5000,${center.lat},${center.lng})["amenity"="restaurant"];
-        out body;
-      `;
-
-      const query1 = `
-        [out:json][timeout:25];
-        node["amenity"="fuel"](${bbox});
-        out body;
+        node(around:5000,${center.lat},${center.lng})["${poiTag}"="${poi.value}"];
+        out center;
       `;
 
       const url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
@@ -197,8 +251,8 @@
 
           data.elements.forEach(poi => {
             console.log(poi);
-            let name = poi.tags.name || "Tankstelle";
-            let info = poi.tags.cuisine || poi.tags.website || poi.tags.phone
+            let name = poi.tags.name || poiText;
+            let info = poi.tags["healthcare:speciality"] || poi.tags.cuisine || poi.tags.website || poi.tags.phone
             if(info){
               if(info.startsWith("http")){
                 info = `<br><a href="${info}">${info}</a>`
