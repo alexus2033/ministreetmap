@@ -6,6 +6,7 @@
   <meta name="keywords" content="Location GPS Mobile IP">
   <meta name="author" content="alexus2033">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <base target="_blank">
   <title>My Locator</title>
   <style>
     table { width: 100%; }
@@ -60,7 +61,7 @@
             </select>
             <button onclick="fetchAndDisplayPOIs()">Zeigen</button></td>
             <td><div id="myInfo"></div></td>
-            <td><a href="https://wiki.openstreetmap.org/wiki/DE:OpenStreetMap_Carto/Lines" target="wiki">Legende</a></td>
+            <td><a href="https://wiki.openstreetmap.org/wiki/DE:OpenStreetMap_Carto/Lines">Legende</a></td>
         </tr>
       </table>
     </div>
@@ -104,17 +105,32 @@
     // Leaflet Karte initialisieren
     const map = L.map('map');
 
-    // OpenStreetMap-Standard-Kachel-Layer hinzufügen
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // OpenStreetMap Standard-Layer (Straßenkarte)
+    var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution:
-        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> Mitwirkende',
-    }).addTo(map); 
+      attribution: '© OpenStreetMap-Mitwirkende'
+    }).addTo(map);
 
-/*  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // Satelliten-Overlay-Layer
+    var satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://carto.com/">CartoDB</a>'
-    }).addTo(map); */
+      attribution: 'Tiles © Esri'
+    });
+
+    // Label-Layer (nur die Beschriftungen, z.B. von Esri)
+    var labelLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Labels © Esri',
+      pane: 'overlayPane',
+      opacity: 0.7
+    });
+
+    var satelliteWithLabels = L.layerGroup([satelliteLayer, labelLayer]);
+
+    L.control.layers({
+      "OSM Straßenkarte": osmLayer,
+      "Satellitenbilder" : satelliteWithLabels
+    }).addTo(map);
 
     var grayIcon = new L.Icon({
         iconUrl: 'data:image/png;base64,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',
@@ -223,6 +239,21 @@
           (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
     }
 
+    function shortenURL(url, maxLength = 40) {
+      if (url.length <= maxLength) return url;
+      // Entferne Protokoll (http:// oder https://)
+      let stripped = url.replace(/^https?:\/\//, '');
+
+      // Zerlege in Teile anhand von "/"
+      const parts = stripped.split('/');
+
+      // Nimm Domain + erstes Verzeichnis (falls vorhanden)
+      const domain = parts[0];
+      const firstPath = parts[1] ? '/' + parts[1] : '';
+
+      return domain + firstPath + '...';
+    }
+
     function fetchAndDisplayPOIs() {
       const poi = document.getElementById('poiType');
       const poiText = poi.options[poi.selectedIndex].text;
@@ -255,7 +286,7 @@
             let info = poi.tags["healthcare:speciality"] || poi.tags.cuisine || poi.tags.website || poi.tags.phone
             if(info){
               if(info.startsWith("http")){
-                info = `<br><a href="${info}">${info}</a>`
+                info = `<br><a href="${info}">${shortenURL(info)}</a>`
               } else {
                 info = `<br>${info}`
               }
