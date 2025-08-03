@@ -9,6 +9,8 @@
   <base target="_blank">
   <title>My Locator</title>
   <style>
+    html, body {
+      margin: 0px; }
     table { width: 100%; }
     td div { height: 40px;
       overflow: hidden; }
@@ -47,9 +49,13 @@
     <div id="top-pane">
       <table>
         <tr>
-            <td><div id="myIP"></div></td>
+            <td><div id="myInfo"></div></td>
             <td><div id="myLoc"></div></td>
-            <td><button onclick="getLocation()">Location</button></td>
+            <td>
+              <button onclick="startSearch()">Search</button>
+              <input type="text" id="searchInput" placeholder="Ort eingeben" maxlength="50" />
+            </td>
+            <td><button onclick="getPosFromGPS()">Location</button></td>
             <td><label for="poiType">POI: </label>
             <select id="poiType" name="poi">
               <option value="fuel">Tankstelle</option>
@@ -60,7 +66,6 @@
               <option value="pharmacy">Apotheke</option>
             </select>
             <button onclick="fetchAndDisplayPOIs()">Zeigen</button></td>
-            <td><div id="myInfo"></div></td>
             <td><a href="https://wiki.openstreetmap.org/wiki/DE:OpenStreetMap_Carto/Lines">Legende</a></td>
         </tr>
       </table>
@@ -107,6 +112,9 @@
 
     // Leaflet Karte initialisieren
     const map = L.map('map');
+    map.zoomControl.setPosition('bottomright');
+
+    let marker; // Variable für den Marker
 
     // OpenStreetMap Standard-Layer
     var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -170,7 +178,7 @@
           }
           throw new Error(`Request to ip-api.com failed ${response}`);
       }).then(x => {
-          myIP.innerHTML = `IP: ${x.query} ${x.isp}`;
+          myInfo.innerHTML = `IP: ${x.query} ${x.isp}`;
           if(x.region == x.countryCode.trim()){
             x.region = "";
           }
@@ -179,8 +187,8 @@
           showPosition(pos, 10);
       }).catch((error) => {
           //no position available
-          let pos = { longitude: 20, latitude: 0}
-          showPosition(pos, 2);
+          let pos = { longitude: 0, latitude: 0 }
+          showPosition(pos, 3);
       });
     }
 
@@ -191,11 +199,11 @@
           speed = (pos.speed) ? `Speed: ${pos.speed.toFixed(2)}` : "",
           accur = (pos.accuracy) ? `Accuracy: ${pos.accuracy.toFixed(2)}` : ""
       
-      myInfo.innerHTML = `Long: ${pos.longitude} Lat: ${pos.latitude} ${alt} ${speed} ${accur}`; 
+      myLoc.innerHTML = `Long: ${pos.longitude} Lat: ${pos.latitude} ${alt} ${speed} ${accur}`; 
       if(pos.accuracy > 150){
-          myInfo.classList.add("alert");
+          myLoc.classList.add("alert");
       } else { //mark invalid location
-          myInfo.classList.remove("alert");
+          myLoc.classList.remove("alert");
       }
       console.log(position);
       map.setView([position.latitude,position.longitude], zoom);
@@ -206,8 +214,8 @@
     getPosFromIP();
 
     function locError(err) {
-      myInfo.innerHTML = `ERROR(${err.code}): ${err.message}`;
-      myInfo.classList.add("alert");
+      myLoc.innerHTML = `ERROR(${err.code}): ${err.message}`;
+      myLoc.classList.add("alert");
     }
 
     function clearMarkers() {
@@ -221,13 +229,82 @@
       }
     }
 
-    function getLocation() {
+    function getPosFromGPS() {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(showPosition, locError);
         } else { 
             myLoc.innerHTML = "location not supported by this browser";
             yInfo.classList.add("alert");
         }
+    }
+
+    function upper1stCharOfEachWord(str) {
+      return str
+      .replaceAll(';',' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+    }
+
+    function startSearch() {
+      let query = document.getElementById('searchInput').value.trim();
+      const resultDiv = document.getElementById('myLoc');
+
+      if (!query) {
+        alert('Bitte einen Suchbegriff eingeben.');
+        return;
+      }
+
+      if (navigator && !navigator.onLine) {
+        resultDiv.innerHTML = "Suche aktuell nicht möglich. Gerät ist offline."
+        return;
+      }
+
+      resultDiv.innerHTML = "Karte wird geladen…"
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`;
+      fetch(url)
+        .then((response) => {
+          if (!response.ok) throw new Error('Netzwerkfehler');
+          return response.json();
+        })
+        .then((data) => {
+          if (data.features.length === 0) {
+            resultDiv.innerHTML = 'Keine Ergebnisse gefunden.';
+            // Marker entfernen, falls vorhanden
+            if (marker) {
+              map.removeLayer(marker);
+            }
+            return;
+          }
+          console.log(data[0]);
+          // Erstes Ergebnis nehmen
+          const place = data.features[0],
+            coords = place.geometry.coordinates,
+            lat = coords[1],
+            lon = coords[0],
+            city = place.properties.city ? place.properties.city + "," : "";
+
+          const label = `${place.properties.name}, ${city} ${place.properties.country}`;
+          const type = upper1stCharOfEachWord(place.properties.type);
+
+          resultDiv.innerHTML = `<strong>Gefunden:</strong> ${label} (${type})<br>Latitude: ${lat} Longitude: ${lon}`;
+
+          // Karte auf gefundenen Ort setzen
+          map.setView([lat, lon], 13);
+
+          // Marker neu setzen oder erstellen
+          if (marker) {
+            marker.setLatLng([lat, lon]);
+          } else {
+            marker = L.circleMarker([lat, lon],8).addTo(map);
+          }
+
+          // Popup mit Beschreibung öffnen
+          marker.bindPopup(label).openPopup();
+        })
+        .catch((error) => {
+          resultDiv.innerHTML = 'Fehler bei der Suche: ' + error.message;
+        });
     }
 
     function isOpen(opening_hours_str) {
@@ -293,14 +370,13 @@
           clearMarkers();
 
           data.elements.forEach(poi => {
-            console.log(poi);
             let name = poi.tags.name || poi.tags.operator || poiText;
             let info = poi.tags["healthcare:speciality"] || poi.tags.cuisine || poi.tags.website || poi.tags.phone
             if(info){
               if(info.startsWith("http")){
                 info = `<br><a href="${info}">${shortenURL(info)}</a>`
               } else {
-                info = `<br>${info}`
+                info = `<br>${upper1stCharOfEachWord(info)}`
               }
             } else {
               info = "";
@@ -336,7 +412,7 @@
             currentMarkers.push(marker);
           });
 
-          console.log(`Gefundene und angezeigte Tankstellen: ${data.elements.length}`);
+          console.log(`Gefundene POIs: ${data.elements.length}`);
         })
         .catch(err => {
           console.error("Fehler bei Overpass-Abfrage:", err);
